@@ -1,0 +1,38 @@
+# Pushing a tag like v1.0.0 builds WriteFlow.app on GitHub's Mac runner and publishes a release
+# with WriteFlow-<version>.zip attached. The tag must match CFBundleShortVersionString in
+# Resources/Info.plist.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches the app version
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' Resources/Info.plist)
+          if [ "v$VERSION" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match version $VERSION in Resources/Info.plist"
+            exit 1
+          fi
+
+      - name: Test
+        run: swift test
+
+      - name: Build
+        run: sh scripts/build-app.sh
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: WriteFlow ${{ github.ref_name }}
+          files: dist/WriteFlow-*.zip
+          generate_release_notes: true

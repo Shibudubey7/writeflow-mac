@@ -60,10 +60,13 @@ WriteFlow from the Accessibility list (−) and allow it again.
 
 ## Release
 
-1. Bump `CFBundleShortVersionString` (and `CFBundleVersion`) in `Resources/Info.plist`.
-2. `sh scripts/build-app.sh`
-3. On GitHub: Releases → Draft a new release → tag `v1.0.0` → attach `dist/WriteFlow-1.0.0.zip`.
-   Or: `gh release create v1.0.0 dist/WriteFlow-1.0.0.zip --title "WriteFlow 1.0.0"`
+Releases are built by GitHub Actions (`.github/workflows/release.yml`) when a version tag is pushed:
+
+1. Bump `CFBundleShortVersionString` (and `CFBundleVersion`) in `Resources/Info.plist`, commit, push.
+2. Tag the commit with the same version and push the tag. In VS Code: Command Palette →
+   **Git: Create Tag** → `v1.0.1`, then **Git: Push Tags**. Or `git tag v1.0.1 && git push origin v1.0.1`.
+3. In a few minutes the release appears under Releases with `WriteFlow-1.0.1.zip` attached
+   (progress under the Actions tab).
 
 To skip the "Open Anyway" step for users, the app has to be signed with a Developer ID and
 notarized, which needs an Apple Developer account (US$99/year).
