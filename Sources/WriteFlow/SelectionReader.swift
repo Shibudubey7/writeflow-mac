@@ -144,6 +144,9 @@ enum SelectionReader {
         let items = saved.map { pairs -> NSPasteboardItem in
             let item = NSPasteboardItem()
             for (type, data) in pairs { item.setData(data, forType: type) }
+            // Clipboard managers (Maccy and others) skip items marked transient, so putting the
+            // user's clipboard back doesn't add a duplicate to their history.
+            item.setData(Data(), forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
             return item
         }
         if !items.isEmpty { pasteboard.writeObjects(items) }
@@ -166,12 +169,20 @@ enum SelectionReader {
         log.notice("replaced selection with \(text.count, privacy: .public) characters")
     }
 
+    /// Set on keys WriteFlow presses itself (⌘C, ⌘V), so its key watchers can ignore them.
+    static let syntheticKeyMarker: Int64 = 0x5746_4C57
+
+    static func isSynthetic(_ event: NSEvent) -> Bool {
+        event.cgEvent?.getIntegerValueField(.eventSourceUserData) == syntheticKeyMarker
+    }
+
     private static func pressCommand(_ keyCode: Int) {
         let source = CGEventSource(stateID: .combinedSessionState)
         let key = CGKeyCode(keyCode)
         for down in [true, false] {
             let event = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: down)
             event?.flags = .maskCommand
+            event?.setIntegerValueField(.eventSourceUserData, value: syntheticKeyMarker)
             event?.post(tap: .cghidEventTap)
         }
     }

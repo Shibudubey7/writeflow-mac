@@ -52,6 +52,18 @@ enum Snapshots {
 
         save(SettingsView(settings: settings, client: client), "settings", into: folder, size: NSSize(width: 500, height: 640))
 
+        let sample = { (value: Int) in BubbleScore.value(Score(score: value, scores: ["grammar": value, "casual": value])) }
+        for (name, score) in [("bubble-plain", BubbleScore.none), ("bubble-pending", .pending), ("bubble-50", sample(50)), ("bubble-70", sample(70)), ("bubble-92", sample(92))] {
+            let view = BubbleView(frame: NSRect(x: 0, y: 0, width: score == .none ? 28 : 60, height: 28))
+            view.score = score
+            let window = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            window.contentView = view
+            if let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+                view.cacheDisplay(in: view.bounds, to: rep)
+                try? rep.representation(using: .png, properties: [:])?.write(to: folder.appendingPathComponent("\(name).png"))
+            }
+        }
+
         for on in [true, false] {
             let image = StatusIcon.image(on: on)
             let big = NSImage(size: NSSize(width: 72, height: 72), flipped: false) { rect in

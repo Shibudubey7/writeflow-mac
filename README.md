@@ -14,6 +14,10 @@ paste it yourself. WriteFlow changes nothing until you click.
   and later ignore global shortcuts that use only Option and Shift.
 - **Or click the W button** that appears when you select text with the mouse or the keyboard
   (⇧ or ⌘⇧ with arrows, ⌘A), while WriteFlow is on.
+- **The W button shows a score** from 0 to 100 for how well the selected text already fits the
+  styles you chose in Settings (their average; hover to see each): red below 65, yellow 65 to 84,
+  green 85 and up. In Slack, Chrome and other apps that don't report their selection, WriteFlow reads it
+  with ⌘C to score it and puts your clipboard back. Turn it off in Settings.
 - **W in the menu bar** shows whether it is on: filled W = on, outlined W = off. Click it for
   Turn On/Off, Rewrite Clipboard Text, Settings and Quit. When off, the W button never appears;
   the shortcut still works.
@@ -37,8 +41,9 @@ paste it yourself. WriteFlow changes nothing until you click.
 
 ## Privacy
 
-Only the text you ask about is sent to the WriteFlow server, to make suggestions. It is not
-stored. A random install ID is sent with each request so the server can share its free daily
+Only text you select is sent to the WriteFlow server: to score it while the writing score is on,
+and to make suggestions when you ask. It is not stored. Turn the score off in Settings and nothing
+is sent until you click W or press the shortcut. A random install ID is sent with each request so the server can share its free daily
 limits fairly; it is not linked to you. Details: https://writeflow-api-gcd5.onrender.com/privacy
 
 ## Build

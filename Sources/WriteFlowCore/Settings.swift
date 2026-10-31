@@ -72,6 +72,7 @@ public final class SettingsStore: ObservableObject {
         static let installID = "installID"
         static let onboarded = "onboarded"
         static let shortcut = "shortcut"
+        static let showScore = "showScore"
     }
 
     private let defaults: UserDefaults
@@ -89,6 +90,8 @@ public final class SettingsStore: ObservableObject {
     @Published public var askFirst: Bool { didSet { defaults.set(askFirst, forKey: Key.askFirst) } }
     /// The on/off switch: when off, no W button appears on selection. The shortcut still works.
     @Published public var enabled: Bool { didSet { defaults.set(enabled, forKey: Key.enabled) } }
+    /// Show a 0-100 writing score on the W button; the selected text is sent to score it.
+    @Published public var showScore: Bool { didSet { defaults.set(showScore, forKey: Key.showScore) } }
     @Published public var shortcut: Shortcut {
         didSet {
             defaults.set(["keyCode": shortcut.keyCode, "modifiers": shortcut.modifiers, "key": shortcut.key], forKey: Key.shortcut)
@@ -116,6 +119,7 @@ public final class SettingsStore: ObservableObject {
         romanized = defaults.bool(forKey: Key.romanized)
         askFirst = defaults.bool(forKey: Key.askFirst)
         enabled = defaults.object(forKey: Key.enabled) as? Bool ?? true
+        showScore = defaults.object(forKey: Key.showScore) as? Bool ?? true
         shortcut = Self.storedShortcut(defaults.dictionary(forKey: Key.shortcut)) ?? .default
         // Reading the Keychain can ask the user for permission after an update, so only when a key was saved.
         accessKey = defaults.bool(forKey: Key.hasAccessKey) ? keychain.read() : ""

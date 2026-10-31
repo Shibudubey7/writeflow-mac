@@ -66,6 +66,11 @@ struct SettingsView: View {
         Form {
             Section {
                 Toggle("Show the W button when I select text", isOn: $settings.enabled)
+                Toggle("Show a score on the W button", isOn: $settings.showScore)
+                    .disabled(!settings.enabled)
+                Text("How well the selected text already fits the styles you chose under Suggestions (their average; hover for each), 0 to 100: red below 65, yellow 65 to 84, green 85 and up. The selected text is sent to the WriteFlow server to score it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 LabeledContent("Shortcut") {
                     ShortcutRecorder(shortcut: $settings.shortcut)
                 }

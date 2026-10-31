@@ -16,6 +16,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var hotKey: HotKey?
     private var keyMonitor: Any?
     private var lastShortcut = Date.distantPast
+    /// Bumped on every new selection and dismissal, so a late score never lands on the wrong one.
+    private var selectionID = 0
+    /// The current selection's text once known (read for the score), so clicking W needn't copy again.
+    private var bubbleText: String?
     private var cancellables: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -31,12 +35,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         log.notice("started, Accessibility \(SelectionReader.isTrusted ? "allowed" : "not allowed", privacy: .public)")
 
         watcher.onSelection = { [weak self] text, location in
-            guard let self, !self.card.isOpen else { return }
-            self.bubble.show(at: location) { [weak self] in
-                if let text { self?.card.show(text: text, at: location) } else { self?.rewriteSelection(at: location) }
-            }
+            self?.selectionMade(text, at: location)
         }
-        watcher.onDismiss = { [weak self] in self?.bubble.hide() }
+        watcher.onDismiss = { [weak self] in
+            guard let self else { return }
+            self.selectionID += 1
+            self.bubbleText = nil
+            self.bubble.hide()
+        }
 
         settings.$enabled
             .removeDuplicates()
@@ -60,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard !SelectionReader.isSynthetic(event) else { return }
             let matches = Int(event.keyCode) == shortcut.keyCode && Self.carbonModifiers(event.modifierFlags) == shortcut.modifiers
             guard matches else { return }
             MainActor.assumeIsolated { self?.shortcutPressed(via: "key monitor") }
@@ -90,6 +97,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ? "WriteFlow is on: select text to see the W button"
             : "WriteFlow is off: \(settings.shortcut.display) still works"
         if enabled { watcher.start() } else { watcher.stop() }
+    }
+
+    /// Shows the W button, then asks for the writing score. Apps that don't report their selection
+    /// (Slack, Chrome) get it read with ⌘C first, the clipboard put back right after.
+    private func selectionMade(_ text: String?, at location: NSPoint) {
+        guard !card.isOpen else { return }
+        selectionID += 1
+        let id = selectionID
+        bubbleText = text
+        bubble.show(at: location) { [weak self] in
+            guard let self else { return }
+            if let text = self.bubbleText { self.card.show(text: text, at: location) } else { self.rewriteSelection(at: location) }
+        }
+        guard settings.showScore else { return }
+        bubble.setScore(.pending)
+        Task { [weak self] in
+            var resolved = text
+            if resolved == nil { resolved = await SelectionReader.selectedText() }
+            guard let self, self.selectionID == id else { return }
+            guard let resolved else {
+                self.bubble.setScore(.none)
+                return
+            }
+            self.bubbleText = resolved
+            let score = await self.client.score(
+                resolved, modes: self.settings.modes,
+                server: self.settings.serverURL, accessKey: self.settings.accessKey, installID: self.settings.installID
+            )
+            guard self.selectionID == id else { return }
+            self.bubble.setScore(score.map { .value($0) } ?? .none)
+        }
     }
 
     private func rewriteSelection(at location: NSPoint = NSEvent.mouseLocation) {

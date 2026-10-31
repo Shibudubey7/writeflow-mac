@@ -118,6 +118,45 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(error.code, "HTTP_502")
     }
 
+    func testScoreSendsTextAndCaches() async throws {
+        StubProtocol.handler = { _ in (200, [:], Data(#"{"score":78,"scores":{"grammar":70,"casual":86}}"#.utf8)) }
+        let first = await client.score(" hello ", modes: ["grammar", "casual"], server: server, accessKey: "", installID: "install-1234567890abcdef")
+        let second = await client.score("hello", modes: ["grammar", "casual"], server: server, accessKey: "", installID: "install-1234567890abcdef")
+        XCTAssertEqual(first, Score(score: 78, scores: ["grammar": 70, "casual": 86]))
+        XCTAssertEqual(second, first)
+        XCTAssertEqual(first?.breakdown, "Fix grammar 70 · Casual 86")
+        XCTAssertEqual(StubProtocol.requests.count, 1)
+        // Other modes are a different question, so they are asked again.
+        _ = await client.score("hello", modes: ["polite"], server: server, accessKey: "", installID: "i")
+        XCTAssertEqual(StubProtocol.requests.count, 2)
+        let sent = try XCTUnwrap(StubProtocol.requests.first)
+        XCTAssertEqual(sent.request.url?.path, "/api/v1/scores")
+        XCTAssertEqual(sent.request.value(forHTTPHeaderField: "X-WriteFlow-Install"), "install-1234567890abcdef")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: sent.body) as? [String: Any])
+        XCTAssertEqual(body["text"] as? String, "hello")
+        XCTAssertEqual(body["modes"] as? [String], ["grammar", "casual"])
+    }
+
+    func testScoreIsNilOnErrors() async {
+        StubProtocol.handler = { _ in (429, ["Retry-After": "5"], Data(#"{"error":{"code":"RATE_LIMITED","message":"x","requestId":"r"}}"#.utf8)) }
+        let limited = await client.score("a", modes: ["grammar"], server: server, accessKey: "", installID: "i")
+        XCTAssertNil(limited)
+        StubProtocol.handler = { _ in (200, [:], Data(#"{"score":140,"scores":{}}"#.utf8)) }
+        let outOfRange = await client.score("b", modes: ["grammar"], server: server, accessKey: "", installID: "i")
+        XCTAssertNil(outOfRange)
+        let empty = await client.score("   ", modes: ["grammar"], server: server, accessKey: "", installID: "i")
+        XCTAssertNil(empty)
+    }
+
+    func testScoreBands() {
+        XCTAssertEqual(ScoreBand(score: 0), .low)
+        XCTAssertEqual(ScoreBand(score: 64), .low)
+        XCTAssertEqual(ScoreBand(score: 65), .fair)
+        XCTAssertEqual(ScoreBand(score: 84), .fair)
+        XCTAssertEqual(ScoreBand(score: 85), .good)
+        XCTAssertEqual(ScoreBand(score: 100), .good)
+    }
+
     func testConnectionCheck() async {
         StubProtocol.handler = { request in
             request.url?.path == "/health" ? (200, [:], Data(#"{"status":"ok"}"#.utf8)) : (400, [:], Data())

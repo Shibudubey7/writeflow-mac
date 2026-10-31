@@ -45,6 +45,33 @@ public struct WriteFlowError: Error, Equatable, Sendable {
     }
 }
 
+/// The W button's score: how well the text already fits each chosen mode, and their average.
+public struct Score: Equatable, Sendable, Decodable {
+    /// 0-100, the average of `scores`.
+    public let score: Int
+    /// Mode id -> 0-100.
+    public let scores: [String: Int]
+
+    public init(score: Int, scores: [String: Int]) {
+        self.score = score
+        self.scores = scores
+    }
+
+    /// "Fix grammar 70 · Casual 86", in display order.
+    public var breakdown: String {
+        Mode.all.compactMap { mode in scores[mode.id].map { "\(mode.label) \($0)" } }.joined(separator: " · ")
+    }
+}
+
+/// Colour band of a writing score: green from 85, yellow from 65, red below.
+public enum ScoreBand: Equatable, Sendable {
+    case low, fair, good
+
+    public init(score: Int) {
+        self = score >= 85 ? .good : score >= 65 ? .fair : .low
+    }
+}
+
 public enum ConnectionCheck: Equatable, Sendable {
     case connected
     case needsKey
@@ -66,6 +93,9 @@ public actor APIClient {
     /// Same text, modes and language give the same answer; spares a round trip when a card reopens.
     private var cache: [CorrectionRequest: Correction] = [:]
     private var cacheOrder: [CorrectionRequest] = []
+    /// Modes + selected text -> score; the same selection is never scored twice for the same modes.
+    private var scores: [String: Score] = [:]
+    private var scoreOrder: [String] = []
 
     public init(session: URLSession? = nil) {
         self.session = session
@@ -145,6 +175,34 @@ public actor APIClient {
             message: envelope?.error.message ?? "The server answered with status \(http.statusCode).",
             retryAfterSeconds: http.value(forHTTPHeaderField: "Retry-After").flatMap { Int($0) }
         ))
+    }
+
+    /// The W button's score for `modes` (mode ids), or nil on any failure (the button then shows
+    /// just the W). Not worth waiting a minute for a sleeping server, hence the shorter timeout.
+    public func score(
+        _ text: String, modes: [String], server: String, accessKey: String, installID: String
+    ) async -> Score? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.utf16.count <= maxInputChars, !modes.isEmpty else { return nil }
+        let key = modes.joined(separator: ",") + "\n" + trimmed
+        if let cached = scores[key] { return cached }
+        guard let url = URL(string: "\(server)/api/v1/scores") else { return nil }
+        var request = URLRequest(url: url, timeoutInterval: 30)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(installID, forHTTPHeaderField: Self.installIDHeader)
+        if !accessKey.isEmpty { request.setValue(accessKey, forHTTPHeaderField: Self.accessKeyHeader) }
+        struct Body: Encodable { let text: String; let modes: [String] }
+        request.httpBody = try? JSONEncoder().encode(Body(text: trimmed, modes: modes))
+        guard let (data, response) = try? await load(request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let score = try? JSONDecoder().decode(Score.self, from: data),
+              (0...100).contains(score.score)
+        else { return nil }
+        scores[key] = score
+        scoreOrder.append(key)
+        if scoreOrder.count > 200 { scores[scoreOrder.removeFirst()] = nil }
+        return score
     }
 
     /// For Settings: /health, then an empty request, which costs no model call (the key is checked

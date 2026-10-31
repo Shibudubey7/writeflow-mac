@@ -46,6 +46,7 @@ final class SelectionWatcher {
             MainActor.assumeIsolated { self?.mouseUp() }
         }
         let keyDown = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard !SelectionReader.isSynthetic(event) else { return }
             let keyCode = Int(event.keyCode)
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             MainActor.assumeIsolated { self?.keyDown(keyCode, flags) }
